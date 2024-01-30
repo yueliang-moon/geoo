@@ -1,0 +1,65 @@
+from osgeo import gdal, gdal_array
+import matplotlib.pyplot as plt
+
+from osgeo import osr
+from PIL import Image, ImageDraw
+import shapefile
+
+#         if 'int8' in im_data.dtype.name:
+#             datatype = gdal.GDT_Byte
+#         elif 'int16' in im_data.dtype.name:
+#             datatype = gdal.GDT_UInt16
+#         else:
+#             datatype = gdal.GDT_Float32
+
+path = r'C:\Users\Administrator\Desktop\1\19.TIF'
+shp_path = r"C:\Users\Administrator\Desktop\1\mian.shp"
+'''读取影像'''
+# 将数据源作为gdal_array载入
+srcArray = gdal_array.LoadFile(path)
+# 同时载入gdal库的图片从而获取geotransform
+srcImage = gdal.Open(path)
+# (左上角的坐标, 像素宽度, 旋转系数, 左上角的坐标, 旋转系数, 像素高度,6)
+'''(左上角的坐标, 像素宽度, 旋转系数, 左上角的坐标, 旋转系数, 像素高度,6)'''
+geoTrans = srcImage.GetGeoTransform()
+print(geoTrans)
+print(srcArray.shape)
+r = shapefile.Reader(shp_path)
+
+# 获取矢量文件的外接矩形,此处是投影坐标
+minX, minY, maxX, maxY = r.bbox
+print('minX:', minX)
+print('maxX:', maxX)
+print('minY:', minY)
+print('maxY:', maxY)
+# 获取影像文件的六参数
+img_X, img_Y, img_W, img_H = geoTrans[0],geoTrans[3],geoTrans[1],geoTrans[5]
+print('img_X, img_Y, img_W, img_H:',img_X, img_Y, img_W, img_H)
+# 计算时候有三种方式，用过像素的像素、用外面相邻像素、用里面相邻的像素
+# 计算对应像素的位置，此处用最外面相邻的像素
+# 计算X的最大最小值
+print('')
+minX_loc,maxX_loc = int((minX - img_X)/30), int((maxX - img_X)/30)
+print(minX_loc,maxX_loc)
+# 计算Y的最大最小值
+minY_loc,maxY_loc = int((img_Y - maxY)/30), int((img_Y - minY)/30)
+print(minY_loc,maxY_loc)
+clip = srcArray[:,3496:7260,240:6936]
+# 为图片创建一个新的geomatrix对象以便附加地理参照数据,
+geoTrans = list(geoTrans)
+geoTrans[0] = minX
+geoTrans[3] = maxY
+
+im_proj = srcImage.GetProjection()
+#创建文件
+driver = gdal.GetDriverByName("GTiff")            #数据格式
+dataset = driver.Create(r'C:\Users\Administrator\Desktop\1\yanmo.tif', clip.shape[2], clip.shape[1], clip.shape[0],gdal.GDT_UInt16)
+dataset.SetGeoTransform(geoTrans)                 #写入仿射变换的六个参数
+dataset.SetProjection(im_proj)                    #写入投影信息
+
+if clip.shape[0] == 1:
+    dataset.GetRasterBand(1).WriteArray(im_data)  #写入数组数据
+else:
+    for i in range(clip.shape[0]):
+        dataset.GetRasterBand(i+1).WriteArray(clip[i])
+del dataset
